@@ -1,0 +1,56 @@
+import os
+import argparse
+import tensorflow as tf
+
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+
+# 瀛楀吀鏂囦欢锛屼娇鐢ㄥ鐞嗗悗鐨勮鏂欏簱鏂囦欢锛岀敤浠LP璁粌涓瘝鍚戦噺鐨勬鐜囪??
+tf.flags.DEFINE_string("w2v_file_path", "/../../mnt/results.txt", "w2v_file")
+# 鏁版嵁鏂囦欢锛岀敤浠ヨ缁冨拰妫€娴嬫ā??
+tf.flags.DEFINE_string("data_file_path", "/../../mnt/pheme-rnr-dataset", "data_file")
+
+# 鍥哄畾甯栧瓙??
+tf.flags.DEFINE_integer("post_fn", 2, "Fixed Number of Posts")
+# 甯栧瓙鏃舵晥??
+tf.flags.DEFINE_integer("time_limit", 48, "Posts Time Limitation (The Posts in 48 Hours)")
+# 鍒嗙被绫诲埆??
+tf.flags.DEFINE_integer("class_num", 2, "#Class (Non-Rumor, Rumor)")
+FLAGS = tf.flags.FLAGS
+print(FLAGS)
+
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    # parser.add_argument('--dataset', required=True, choices='20news mr trec sst mpqa reuters mrshort imdb mnist'.split()
+    #                     , help='Name of dataset')
+    # parser.add_argument('--data_path', default='G:/data/'.format(THIS_DIR), help='pickle data dir')
+    parser.add_argument('--gpu_id', default="5", type=str)
+    parser.add_argument('--save_ckpt', default='./model_ckpt')
+
+    # common train hyer-params
+    parser.add_argument('--epochs', default=30, type=int)
+    parser.add_argument('--l2', default=0., type=float)
+    parser.add_argument('--dropout_ratio', default=0.1, type=float)
+
+
+    parser = news_config(parser)
+
+    parser.parse_args()
+    return parser.parse_args()
+
+
+def news_config(parser):
+    parser.add_argument('--batch_size', default=30, type=int, help='Batch size')  # 鎵规暟
+    parser.add_argument('--init_lr', default=0.01, type=float, help='initial learning rate')  # 瀛︿範鐜?
+    parser.add_argument('--embedding_size', default=300, type=int, help='Embedding size')
+    parser.add_argument('--filter_size', default=3, type=int, help='convolution filter size of capsule network')
+    parser.add_argument('--num_cap', default=6, type=int, help='set number of capsule')
+    parser.add_argument('--len_ui', default=10, type=int, help='set length of primary capsule property')
+    parser.add_argument('--len_vj', default=16, type=int, help='set length of output capsule property')
+    parser.add_argument('--routing', default=0, type=int, help='method of routing zero is static routing')
+    parser.add_argument('--num_filter', default=256, type=int, help='number of filters')
+
+    return parser
+
+
+
