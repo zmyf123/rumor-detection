@@ -1,0 +1,293 @@
+# coding=utf-8
+import json
+import os
+import time
+import re
+import datetime
+import numpy as np
+import gensim
+from config import *
+import random
+import math
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.text import text_to_word_sequence, one_hot
+from keras.preprocessing.sequence import pad_sequences
+
+files = []
+# 其中数据??label  text(每两个累计递增)   creat_at
+data = {}
+# 552784600502915072这样的文件夹??即每????谣言或非谣言代号
+data_ID = []
+# 随text每两个累加迭??text的个??
+data_len = []
+# 标记是否为谣言，[1, 0]为谣言，[0, 1]为非谣言??
+data_y = []
+
+# 我改了数，这里原本是0，但是下面的log非法，所以加了很小的一点让它非??
+reward_counter = 0.000001
+eval_flag = 0
+max_words = 30000
+# stop words list
+stop_words = ['i', 'me', 'my', 'myself', 'we', 'our',
+              'ours', 'ourselves', 'you', 'your', 'yours',
+              'yourself', 'yourselves', 'he', 'him', 'his',
+              'himself', 'she', 'her', 'hers', 'herself',
+              'it', 'its', 'itself', 'they', 'them', 'their',
+              'theirs', 'themselves', 'what', 'which', 'who',
+              'whom', 'this', 'that', 'these', 'those', 'am',
+              'is', 'are', 'was', 'were', 'be', 'been', 'being',
+              'have', 'has', 'had', 'having', 'do', 'does', 'did',
+              'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or',
+              'because', 'as', 'until', 'while', 'of', 'at',
+              'by', 'for', 'with', 'about', 'against', 'between',
+              'into', 'through', 'during', 'before', 'after',
+              'above', 'below', 'to', 'from', 'up', 'down', 'in',
+              'out', 'on', 'off', 'over', 'under', 'again',
+              'further', 'then', 'once', 'here', 'there', 'when',
+              'where', 'why', 'how', 'all', 'any', 'both', 'each',
+              'few', 'more', 'most', 'other', 'some', 'such', 'no',
+              'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too',
+              'very', 's', 't', 'can', 'will', 'just', 'don',
+              'should', 'now', '']
+
+
+# 获取当前时间
+def get_curtime():
+    return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
+
+
+# 将数据集目录下所有的json格式文件路径读入files列表
+def list_files(data_path):
+    global data, files
+    # 用于返回指定的文件夹 包含 的文件或文件夹的 名字 的列??
+    fs = os.listdir(data_path)
+    for f1 in fs:
+        # 连接两个或更多的路径????/'间隔
+        tmp_path = os.path.join(data_path, f1)
+        # 判断对象是否为一个目录文件夹
+        if not os.path.isdir(tmp_path):
+            if tmp_path.split('.')[-1] == 'json':
+                files.append(tmp_path)
+        else:  # 如果是文件夹则再次进??
+            list_files(tmp_path)
+
+
+# 根据created_at这个特征转化??   ??秒数 来表示时间的浮点??  格式
+def str2timestamp(str_time):
+    month = {'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+             'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08',
+             'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'}
+    ss = str_time.split(' ')
+    m_time = ss[5] + "-" + month[ss[1]] + '-' + ss[2] + ' ' + ss[3]
+    d = datetime.datetime.strptime(m_time, "%Y-%m-%d %H:%M:%S")
+    t = d.timetuple()
+    # 将格式化后的时间转化为时间戳返回
+    timeStamp = int(time.mktime(t))
+    return timeStamp
+
+
+# 数据处理 将每个文件的内容读入字典data
+# 并将created_at、text特征和路径[3](是否为谣言)读入字典ret
+def data_process(file_path):
+    ret = {}
+    # ss为一个列表  ['', '..', '..', 'mnt', 'pheme-rnr-dataset', 'sydneysiege', 'non-rumours', '544357899783655424', 'source-tweet', '544357899783655424.json']
+    ss = file_path.split("/")
+    # data指读到最后的json文件，data包含json文件中的所有信息
+    data = json.load(open(file_path, mode="r", encoding="utf-8"))
+    data['text'] = re.sub("\W", " ", data['text'])
+
+    # 'Wed Jan 07 11:14:08 +0000 2015'  ret是一个双重字典
+    # 例如:{'544357899783655424': {'text': ['the australian muslim community love their home and worked hard to dispel myths. i hope they do not suffer because of this. #sydneysiege'], 'label': 'non-rumours', 'created_at': [1418620011]}}
+
+    ret[ss[7]] = {'label': ss[6], 'text': [data['text'].lower()],
+                  'created_at': [str2timestamp(data['created_at'])],
+                  'followers_count': [int(str(data['user']['followers_count']))],
+                  'listed_count': [int(str(data['user']['listed_count']))],
+                  'statuses_count': [int(str(data['user']['statuses_count']))],
+                  'friends_count': [int(str(data['user']['friends_count']))],
+                  'favourites_count': [int(str(data['user']['favourites_count']))]}
+    text.append(data['text'])
+    followers_count.append(data['user']['followers_count'])
+    listed_count.append(data['user']['listed_count'])
+    statuses_count.append(data['user']['statuses_count'])
+    friends_count.append(data['user']['friends_count'])
+    favourites_count.append(data['user']['favourites_count'])
+
+    return ret
+
+
+def sigmoid(x):
+    return 1.0/(1.0 + np.exp(-x))
+
+
+def cal_user_influence(followers_c, listed_c, statuses_c, friends_c, favourites_c):
+    u_in = (friends_c / average_friends_count + favourites_c / average_favourites_count) / 2
+    u_fans = (listed_c / average_listed_count + followers_c / average_followers_count) / 2
+    u_co = statuses_c / average_statuses_count
+    user_influence = u_in * u_fans * u_co
+    user_influence = round(user_influence, 6)
+    if user_influence == 0.0:
+        user_influence = 0.000001
+    # user_influence = sigmoid(user_influence)
+    return user_influence
+
+
+def cal_user_anthony(followers_c, friends_c):
+    if (followers_c + friends_c) == 0:
+        user_anthony = 0.000001
+    else:
+        user_anthony = followers_c / (followers_c + friends_c)
+        if user_anthony == 0:
+            user_anthony = 0.000001
+    user_anthony = round(user_anthony, 6)
+    return user_anthony
+
+
+# 将每一个词转化为向量
+def get_idx_from_sent(raw_data, key, sent, word_idx):
+    y = []
+    for i in range(len(sent)):
+        words = sent[i].split()[:max_length]
+        user_influence = cal_user_influence(followers_c=raw_data[key]['followers_count'][i],
+                                            listed_c=raw_data[key]['listed_count'][i],
+                                            statuses_c=raw_data[key]['statuses_count'][i],
+                                            friends_c=raw_data[key]['friends_count'][i],
+                                            favourites_c=raw_data[key]['favourites_count'][i])
+
+        user_anthony = cal_user_anthony(followers_c=raw_data[key]['followers_count'][i],
+                                        friends_c=raw_data[key]['friends_count'][i])
+        
+        if user_influence > 0.000001 and user_anthony > 0.000001:
+            for word in words:
+            # 这里word_idx_map需要字典或列表，表示词向量与词对应的表单
+                if len(y) < max_length:
+                    if word not in stop_words:
+                        try:
+                            y.append(word_idx[word])
+                        except:
+                            miss_word = 1
+                else:
+                    break
+            
+
+    while len(y) < max_length:
+        y.append(0)
+    if raw_data[key]["label"] == "non-rumours":
+        # x = np.zeros((1))
+        y.append(0)
+    else:
+        y.append(1)
+
+    return y
+
+
+def make_idx_data(raw_datas, len_train, word_idx):
+    data_sum = []
+    for key in raw_datas.keys():
+        sent = get_idx_from_sent(raw_datas, key, raw_datas[key]["text"], word_idx)
+        data_sum.append(sent)
+    split = len_train
+
+    train = np.array(data_sum[:split])
+    test = np.array(data_sum[split:])
+
+    return train, test
+
+
+# 读取数据   不动
+def load_data(data_path):
+    # get data files path
+    #  files是一个列表，保存了所有json的路径，例如：['/../../mnt/pheme-rnr-dataset/sydneysiege/non-rumours/544357899783655424/source-tweet/544357899783655424.json', '/../../mnt/pheme-rnr-dataset/sydneysiege/non-rumours/544357899783655424/reactions/544358426189373440.json', '/../../mnt/pheme-rnr-dataset/sydneysiege/non-rumours/544357899783655424/reactions/544478198172770304.json']
+    global data, data_t, files, data_ID, data_len, eval_flag, text, followers_count, listed_count, \
+        statuses_count, friends_count, favourites_count, max_length, average_followers_count, \
+        average_listed_count, average_statuses_count, average_friends_count, average_favourites_count
+
+    data = {}
+    data_t = {}
+    files = []
+    data_ID = []
+    data_len = []
+    text = []
+    followers_count = []
+    listed_count = []
+    statuses_count = []
+    friends_count = []
+    favourites_count = []
+    max_length = 500
+
+    list_files(data_path)
+
+    # load data to json
+    for file in files:
+        # 返回一个键值对的字典，ret{'552784600502915072':non-rumours  text  created_at}赋给file
+        # td  例如:{'544357899783655424': {'text': ['the australian muslim community love their home and worked hard to dispel myths. i hope they do not suffer because of this. #sydneysiege'], 'label': 'non-rumours', 'created_at': [1418620011]}}
+        td = data_process(file)
+        # 将ret返回到td中的特征追加写入data（每个文件读入到程序中内容）例如  data是{'544357899783655424': {'text': ['the australian muslim community love their home and worked hard to dispel myths. i hope they do not suffer because of this. #sydneysiege'], 'created_at': [1418620011], 'label': 'non-rumours'}}
+        # for循环之后将每一个文件夹下的json文件的text与created_at放在了一个列表里
+
+        for key in td.keys():
+            if key in data:
+                data[key]['text'].append(td[key]['text'][0])
+                data[key]['created_at'].append(td[key]['created_at'][0])
+                data[key]['followers_count'].append(td[key]['followers_count'][0])
+                data[key]['listed_count'].append(td[key]['listed_count'][0])
+                data[key]['statuses_count'].append(td[key]['statuses_count'][0])
+                data[key]['friends_count'].append(td[key]['friends_count'][0])
+                data[key]['favourites_count'].append(td[key]['favourites_count'][0])
+            else:
+                data[key] = td[key]
+
+    average_followers_count = np.mean(followers_count)
+    average_listed_count = np.mean(listed_count)
+    average_statuses_count = np.mean(statuses_count)
+    average_friends_count = np.mean(friends_count)
+    average_favourites_count = np.mean(favourites_count)
+    
+    tokenizer = Tokenizer(max_words)
+    tokenizer.fit_on_texts(text)
+    word_index = tokenizer.word_index
+
+    import copy
+    x = list(tokenizer.word_counts.items())
+    s = sorted(x, key=lambda p: p[1], reverse=True)
+    small_word_index = copy.deepcopy(word_index)  # 防止原来的字典也被改变了
+    for item in s[30000:]:
+        small_word_index.pop(item[0])
+
+    # 读取语料??
+    word2vec = gensim.models.KeyedVectors.load_word2vec_format(FLAGS.w2v_file_path, binary=False)
+    embeding_dim = 300
+    embeding_matrix = np.zeros((max_words, embeding_dim))
+    for word, i in small_word_index.items():
+        try:
+            embeding_vector = word2vec[word]  # embeding_vector=word2vec[word]
+            embeding_matrix[i - 1] = embeding_vector  # embeding_matrix就是需要的变量
+        except:
+            embeding_vector = None
+
+    train, test = make_idx_data(data, len_train=4061, word_idx=word_index)
+
+    x_train = train[:, : -1]
+    y_train = train[:, -1]
+
+    x_test = test[:, : -1]
+    y_test = test[:, -1]
+
+    y_train = [int(x) for x in y_train]
+    y_train = np.eye(2)[y_train]
+    y_test = [int(x) for x in y_test]
+    y_test = np.eye(2)[y_test]
+
+    seq_len = len(x_train[0])
+    num_classes = 2
+    vocab_size = embeding_matrix.shape[0]
+
+    return seq_len, num_classes, vocab_size, x_train, y_train, x_test, y_test, embeding_matrix
+
+
+
+
+
+
+
+
