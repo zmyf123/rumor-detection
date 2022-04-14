@@ -1,0 +1,40 @@
+# coding=utf-8
+from dataload import *
+import config
+import dataload
+import text_capsnet as capsnet
+import os
+
+data_len = []
+data_ID = []
+
+if __name__ == '__main__':
+    args = config.get_args()
+
+    # 保存模型
+    if not os.path.exists(args.save_ckpt):
+        os.makedirs(args.save_ckpt)
+
+    # gpu id
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+
+    print(get_curtime() + " Loading data ...")
+    seq_len, num_classes, vocab_size, x_train, y_train, x_test, y_test, w2v = dataload.load_data(FLAGS.data_file_path)
+    print(get_curtime() + " Data loaded.")
+
+    print("Number of Train {}, Validation {}".format(len(x_train), len(x_test)))
+
+    text_caps = capsnet.TextCapsnet(args,
+                                    seq_len=seq_len,
+                                    num_classes=num_classes,
+                                    vocab_size=vocab_size,
+                                    x_train=x_train,
+                                    y_train=y_train,
+                                    x_test=x_test,
+                                    y_test=y_test,
+                                    pretrain_vec=w2v)
+
+    # training
+    text_caps.train()
+
