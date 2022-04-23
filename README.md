@@ -23,7 +23,7 @@ Twitter DataSet: https://figshare.com/articles/PHEME_dataset_of_rumours_and_non-
 ### Usage
 1. Download Twitter DataSet and extract, set the DataSet path to the `data_file_path` in `config.py`.
 
-2. Download glove word vectors: http://nlp.stanford.edu/data/glove.840B.300d.zip, and set the `w2v_file_path` in `config.py`.
+2. Download glove word vectors: http://nlp.stanford.edu/data/glove.840B.300d.zip.
 
 3. Run `python main.py`.
 
